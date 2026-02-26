@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"Go-Microservice-Template/internal/model"
 	"Go-Microservice-Template/internal/service"
 
 	"github.com/rs/zerolog/log"
@@ -43,6 +44,23 @@ func (h *HTTPHandler) Metrics(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("# Metrics endpoint - integrate with promhttp.Handler()\n"))
+}
+
+// Login authenticates a user and returns a JWT.
+func (h *HTTPHandler) Login(w http.ResponseWriter, r *http.Request) {
+	var req model.LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	resp, err := h.userService.Login(r.Context(), req, "dev-secret-change-in-production", 24)
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "invalid credentials")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, resp)
 }
 
 // ── Response Helpers ──────────────────────────────────────

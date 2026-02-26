@@ -25,3 +25,16 @@ const (
 	RoleUser  Role = "user"
 	RoleAdmin Role = "admin"
 )
+
+// LoginRequest is the DTO for authentication.
+type LoginRequest struct {
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required"`
+}
+
+// LoginResponse contains the JWT token.
+type LoginResponse struct {
+	Token     string    `json:"token"`
+	ExpiresAt time.Time `json:"expires_at"`
+	User      User      `json:"user"`
+}
