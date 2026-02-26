@@ -14,6 +14,9 @@ import (
 
 // UserCache provides a caching layer for user data.
 type UserCache interface {
+	Get(ctx context.Context, id uuid.UUID) (*model.User, error)
+	Set(ctx context.Context, user *model.User) error
+	Delete(ctx context.Context, id uuid.UUID) error
 }
 
 type redisUserCache struct {

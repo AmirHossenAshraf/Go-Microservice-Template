@@ -38,3 +38,10 @@ type LoginResponse struct {
 	ExpiresAt time.Time `json:"expires_at"`
 	User      User      `json:"user"`
 }
+
+// CreateUserRequest is the DTO for user creation.
+type CreateUserRequest struct {
+	Email    string `json:"email" validate:"required,email"`
+	Name     string `json:"name" validate:"required,min=2,max=100"`
+	Password string `json:"password" validate:"required,min=8"`
+}

@@ -9,12 +9,14 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
 )
 
 // UserService defines the business operations for users.
 type UserService interface {
 	Login(ctx context.Context, req model.LoginRequest, jwtSecret string, expHours int) (*model.LoginResponse, error)
+	Register(ctx context.Context, req model.CreateUserRequest) (*model.User, error)
 }
 
 type userService struct {
@@ -25,6 +27,39 @@ type userService struct {
 // NewUserService creates a new user service with repository and cache dependencies.
 func NewUserService(repo repository.UserRepository, cache repository.UserCache) UserService {
 	return &userService{repo: repo, cache: cache}
+}
+
+func (s *userService) Register(ctx context.Context, req model.CreateUserRequest) (*model.User, error) {
+	// Check if email already exists
+	existing, _ := s.repo.GetByEmail(ctx, req.Email)
+	if existing != nil {
+		return nil, repository.ErrDuplicate
+	}
+
+	// Hash password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, fmt.Errorf("hash password: %w", err)
+	}
+
+	user := &model.User{
+		Email:    req.Email,
+		Name:     req.Name,
+		Password: string(hashedPassword),
+		Role:     model.RoleUser,
+		Active:   true,
+	}
+
+	if err := s.repo.Create(ctx, user); err != nil {
+		return nil, fmt.Errorf("create user: %w", err)
+	}
+
+	// Warm cache
+	if err := s.cache.Set(ctx, user); err != nil {
+		log.Warn().Err(err).Msg("failed to cache new user")
+	}
+
+	return user, nil
 }
 
 func (s *userService) Login(ctx context.Context, req model.LoginRequest, jwtSecret string, expHours int) (*model.LoginResponse, error) {

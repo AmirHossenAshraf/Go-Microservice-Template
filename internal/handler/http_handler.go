@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"Go-Microservice-Template/internal/model"
+	"Go-Microservice-Template/internal/repository"
 	"Go-Microservice-Template/internal/service"
 
 	"github.com/rs/zerolog/log"
@@ -61,6 +62,38 @@ func (h *HTTPHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, resp)
+}
+
+// Register creates a new user account.
+func (h *HTTPHandler) Register(w http.ResponseWriter, r *http.Request) {
+	var req model.CreateUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.Email == "" || req.Name == "" || req.Password == "" {
+		respondError(w, http.StatusBadRequest, "email, name, and password are required")
+		return
+	}
+
+	if len(req.Password) < 8 {
+		respondError(w, http.StatusBadRequest, "password must be at least 8 characters")
+		return
+	}
+
+	user, err := h.userService.Register(r.Context(), req)
+	if err != nil {
+		if err == repository.ErrDuplicate {
+			respondError(w, http.StatusConflict, "email already registered")
+			return
+		}
+		log.Error().Err(err).Msg("register user failed")
+		respondError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	respondJSON(w, http.StatusCreated, user)
 }
 
 // ── Response Helpers ──────────────────────────────────────

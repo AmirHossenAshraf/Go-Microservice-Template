@@ -157,6 +157,7 @@ func setupHTTPRouter(cfg *config.Config, h *handler.HTTPHandler) *chi.Mux {
 	r.Route("/api/v1", func(r chi.Router) {
 		// Public routes
 		r.Post("/auth/login", h.Login)
+		r.Post("/auth/register", h.Register)
 
 	})
 
