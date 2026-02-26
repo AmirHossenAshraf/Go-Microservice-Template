@@ -3,6 +3,7 @@ package main
 import (
 	"Go-Microservice-Template/internal/config"
 	"Go-Microservice-Template/internal/handler"
+	"Go-Microservice-Template/internal/middleware"
 	"Go-Microservice-Template/internal/repository"
 	"Go-Microservice-Template/internal/service"
 	"context"
@@ -158,6 +159,18 @@ func setupHTTPRouter(cfg *config.Config, h *handler.HTTPHandler) *chi.Mux {
 		// Public routes
 		r.Post("/auth/login", h.Login)
 		r.Post("/auth/register", h.Register)
+
+		// Protected routes
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.JWTAuthMiddleware(cfg.JWTSecret))
+			r.Use(middleware.RateLimitMiddleware(100, time.Minute))
+
+			r.Route("/users", func(r chi.Router) {
+
+				r.Post("/", h.CreateUser)
+
+			})
+		})
 
 	})
 

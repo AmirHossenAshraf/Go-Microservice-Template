@@ -96,6 +96,28 @@ func (h *HTTPHandler) Register(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusCreated, user)
 }
 
+// CreateUser creates a new user (admin only).
+func (h *HTTPHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
+	var req model.CreateUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	user, err := h.userService.Register(r.Context(), req)
+	if err != nil {
+		if err == repository.ErrDuplicate {
+			respondError(w, http.StatusConflict, "email already exists")
+			return
+		}
+		log.Error().Err(err).Msg("create user failed")
+		respondError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	respondJSON(w, http.StatusCreated, user)
+}
+
 // ── Response Helpers ──────────────────────────────────────
 
 type errorResponse struct {
