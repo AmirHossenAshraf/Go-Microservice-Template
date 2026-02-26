@@ -45,3 +45,31 @@ type CreateUserRequest struct {
 	Name     string `json:"name" validate:"required,min=2,max=100"`
 	Password string `json:"password" validate:"required,min=8"`
 }
+
+// ListParams holds pagination and filtering parameters.
+type ListParams struct {
+	Page     int    `json:"page"`
+	PageSize int    `json:"page_size"`
+	SortBy   string `json:"sort_by"`
+	SortDir  string `json:"sort_dir"` // "asc" or "desc"
+	Search   string `json:"search"`
+}
+
+// DefaultListParams returns sensible defaults for pagination.
+func DefaultListParams() ListParams {
+	return ListParams{
+		Page:     1,
+		PageSize: 20,
+		SortBy:   "created_at",
+		SortDir:  "desc",
+	}
+}
+
+// ListResponse wraps paginated results.
+type ListResponse[T any] struct {
+	Items      []T   `json:"items"`
+	Total      int64 `json:"total"`
+	Page       int   `json:"page"`
+	PageSize   int   `json:"page_size"`
+	TotalPages int   `json:"total_pages"`
+}

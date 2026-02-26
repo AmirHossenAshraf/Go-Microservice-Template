@@ -168,6 +168,7 @@ func setupHTTPRouter(cfg *config.Config, h *handler.HTTPHandler) *chi.Mux {
 			r.Route("/users", func(r chi.Router) {
 
 				r.Post("/", h.CreateUser)
+				r.Get("/", h.ListUsers)
 
 			})
 		})

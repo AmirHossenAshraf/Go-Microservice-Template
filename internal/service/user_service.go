@@ -17,6 +17,7 @@ import (
 type UserService interface {
 	Login(ctx context.Context, req model.LoginRequest, jwtSecret string, expHours int) (*model.LoginResponse, error)
 	Register(ctx context.Context, req model.CreateUserRequest) (*model.User, error)
+	List(ctx context.Context, params model.ListParams) (*model.ListResponse[model.User], error)
 }
 
 type userService struct {
@@ -96,5 +97,25 @@ func (s *userService) Login(ctx context.Context, req model.LoginRequest, jwtSecr
 		Token:     tokenStr,
 		ExpiresAt: expiresAt,
 		User:      *user,
+	}, nil
+}
+
+func (s *userService) List(ctx context.Context, params model.ListParams) (*model.ListResponse[model.User], error) {
+	users, total, err := s.repo.List(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	totalPages := int(total) / params.PageSize
+	if int(total)%params.PageSize > 0 {
+		totalPages++
+	}
+
+	return &model.ListResponse[model.User]{
+		Items:      users,
+		Total:      total,
+		Page:       params.Page,
+		PageSize:   params.PageSize,
+		TotalPages: totalPages,
 	}, nil
 }

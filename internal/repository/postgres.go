@@ -27,6 +27,7 @@ type UserRepository interface {
 	GetByEmail(ctx context.Context, email string) (*model.User, error)
 	Update(ctx context.Context, user *model.User) error
 	Delete(ctx context.Context, id uuid.UUID) error
+	List(ctx context.Context, params model.ListParams) ([]model.User, int64, error)
 }
 
 // postgresUserRepo implements UserRepository using PostgreSQL.
@@ -193,4 +194,67 @@ func (r *postgresUserRepo) GetByID(ctx context.Context, id uuid.UUID) (*model.Us
 	}
 
 	return &user, nil
+}
+
+func (r *postgresUserRepo) List(ctx context.Context, params model.ListParams) ([]model.User, int64, error) {
+	// Count total matching records
+	countQuery := `SELECT COUNT(*) FROM users WHERE active = true`
+	args := []interface{}{}
+	argIndex := 1
+
+	if params.Search != "" {
+		countQuery += fmt.Sprintf(` AND (name ILIKE $%d OR email ILIKE $%d)`, argIndex, argIndex)
+		args = append(args, "%"+params.Search+"%")
+		argIndex++
+	}
+
+	var total int64
+	if err := r.pool.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count users: %w", err)
+	}
+
+	// Fetch page
+	query := `SELECT id, email, name, password_hash, role, active, created_at, updated_at FROM users WHERE active = true`
+
+	fetchArgs := []interface{}{}
+	fetchIndex := 1
+
+	if params.Search != "" {
+		query += fmt.Sprintf(` AND (name ILIKE $%d OR email ILIKE $%d)`, fetchIndex, fetchIndex)
+		fetchArgs = append(fetchArgs, "%"+params.Search+"%")
+		fetchIndex++
+	}
+
+	// Validate sort column to prevent SQL injection
+	sortCol := "created_at"
+	switch params.SortBy {
+	case "name", "email", "created_at", "updated_at":
+		sortCol = params.SortBy
+	}
+
+	sortDir := "DESC"
+	if params.SortDir == "asc" {
+		sortDir = "ASC"
+	}
+
+	query += fmt.Sprintf(` ORDER BY %s %s`, sortCol, sortDir)
+	query += fmt.Sprintf(` LIMIT $%d OFFSET $%d`, fetchIndex, fetchIndex+1)
+	fetchArgs = append(fetchArgs, params.PageSize, (params.Page-1)*params.PageSize)
+
+	rows, err := r.pool.Query(ctx, query, fetchArgs...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list users: %w", err)
+	}
+	defer rows.Close()
+
+	var users []model.User
+	for rows.Next() {
+		var u model.User
+		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Password, &u.Role, &u.Active, &u.CreatedAt, &u.UpdatedAt); err != nil {
+			return nil, 0, fmt.Errorf("scan user: %w", err)
+		}
+		users = append(users, u)
+	}
+
+	return users, total, nil
 }

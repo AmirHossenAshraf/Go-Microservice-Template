@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"Go-Microservice-Template/internal/model"
 	"Go-Microservice-Template/internal/repository"
@@ -116,6 +117,40 @@ func (h *HTTPHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusCreated, user)
+}
+
+// ListUsers returns a paginated list of users.
+func (h *HTTPHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
+	params := model.DefaultListParams()
+
+	if v := r.URL.Query().Get("page"); v != "" {
+		if p, err := strconv.Atoi(v); err == nil && p > 0 {
+			params.Page = p
+		}
+	}
+	if v := r.URL.Query().Get("page_size"); v != "" {
+		if ps, err := strconv.Atoi(v); err == nil && ps > 0 && ps <= 100 {
+			params.PageSize = ps
+		}
+	}
+	if v := r.URL.Query().Get("search"); v != "" {
+		params.Search = v
+	}
+	if v := r.URL.Query().Get("sort_by"); v != "" {
+		params.SortBy = v
+	}
+	if v := r.URL.Query().Get("sort_dir"); v != "" {
+		params.SortDir = v
+	}
+
+	result, err := h.userService.List(r.Context(), params)
+	if err != nil {
+		log.Error().Err(err).Msg("list users failed")
+		respondError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, result)
 }
 
 // ── Response Helpers ──────────────────────────────────────
