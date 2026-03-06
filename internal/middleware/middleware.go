@@ -9,6 +9,9 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/rs/zerolog/log"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 )
 
 // ── Context Keys ──────────────────────────────────────────
@@ -19,6 +22,57 @@ const (
 	UserIDKey contextKey = "user_id"
 	RoleKey   contextKey = "role"
 )
+
+// ── Logging Middleware ────────────────────────────────────
+
+// LoggingMiddleware logs each HTTP request with duration and status.
+func LoggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		ww := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+
+		next.ServeHTTP(ww, r)
+
+		log.Info().
+			Str("method", r.Method).
+			Str("path", r.URL.Path).
+			Int("status", ww.statusCode).
+			Dur("duration", time.Since(start)).
+			Str("remote", r.RemoteAddr).
+			Msg("request")
+	})
+}
+
+type responseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+// ── Recovery Middleware ───────────────────────────────────
+
+// RecoveryMiddleware catches panics and returns 500 instead of crashing.
+func RecoveryMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if err := recover(); err != nil {
+				log.Error().
+					Interface("panic", err).
+					Str("path", r.URL.Path).
+					Msg("panic recovered")
+
+				http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
+// ── JWT Auth Middleware ───────────────────────────────────
 
 // JWTAuthMiddleware validates JWT tokens and injects user info into context.
 func JWTAuthMiddleware(secret string) func(http.Handler) http.Handler {
@@ -118,5 +172,43 @@ func RateLimitMiddleware(maxRequests int, window time.Duration) func(http.Handle
 
 			next.ServeHTTP(w, r)
 		})
+	}
+}
+
+// ── Metrics Middleware ────────────────────────────────────
+
+// MetricsMiddleware tracks request counts and latencies.
+// In production, replace with Prometheus metrics.
+func MetricsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Placeholder — integrate with prometheus/client_golang
+		next.ServeHTTP(w, r)
+	})
+}
+
+// ── gRPC Interceptors ────────────────────────────────────
+
+// GRPCLoggingInterceptor logs gRPC requests with duration.
+func GRPCLoggingInterceptor() grpc.UnaryServerInterceptor {
+	return func(
+		ctx context.Context,
+		req interface{},
+		info *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler,
+	) (interface{}, error) {
+		start := time.Now()
+
+		resp, err := handler(ctx, req)
+
+		duration := time.Since(start)
+		st, _ := status.FromError(err)
+
+		log.Info().
+			Str("method", info.FullMethod).
+			Str("code", st.Code().String()).
+			Dur("duration", duration).
+			Msg("gRPC request")
+
+		return resp, err
 	}
 }

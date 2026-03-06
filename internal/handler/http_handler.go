@@ -9,7 +9,7 @@ import (
 	"Go-Microservice-Template/internal/repository"
 	"Go-Microservice-Template/internal/service"
 
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )
@@ -50,22 +50,7 @@ func (h *HTTPHandler) Metrics(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("# Metrics endpoint - integrate with promhttp.Handler()\n"))
 }
 
-// Login authenticates a user and returns a JWT.
-func (h *HTTPHandler) Login(w http.ResponseWriter, r *http.Request) {
-	var req model.LoginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
-
-	resp, err := h.userService.Login(r.Context(), req, "dev-secret-change-in-production", 24)
-	if err != nil {
-		respondError(w, http.StatusUnauthorized, "invalid credentials")
-		return
-	}
-
-	respondJSON(w, http.StatusOK, resp)
-}
+// ── Auth Endpoints ────────────────────────────────────────
 
 // Register creates a new user account.
 func (h *HTTPHandler) Register(w http.ResponseWriter, r *http.Request) {
@@ -99,6 +84,25 @@ func (h *HTTPHandler) Register(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusCreated, user)
 }
 
+// Login authenticates a user and returns a JWT.
+func (h *HTTPHandler) Login(w http.ResponseWriter, r *http.Request) {
+	var req model.LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	resp, err := h.userService.Login(r.Context(), req, "dev-secret-change-in-production", 24)
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "invalid credentials")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, resp)
+}
+
+// ── User CRUD Endpoints ───────────────────────────────────
+
 // CreateUser creates a new user (admin only).
 func (h *HTTPHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	var req model.CreateUserRequest
@@ -119,6 +123,81 @@ func (h *HTTPHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusCreated, user)
+}
+
+// GetUser retrieves a user by ID.
+func (h *HTTPHandler) GetUser(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid user ID")
+		return
+	}
+
+	user, err := h.userService.GetByID(r.Context(), id)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			respondError(w, http.StatusNotFound, "user not found")
+			return
+		}
+		log.Error().Err(err).Msg("get user failed")
+		respondError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, user)
+}
+
+// UpdateUser updates an existing user.
+func (h *HTTPHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid user ID")
+		return
+	}
+
+	var req model.UpdateUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	user, err := h.userService.Update(r.Context(), id, req)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			respondError(w, http.StatusNotFound, "user not found")
+			return
+		}
+		if err == repository.ErrDuplicate {
+			respondError(w, http.StatusConflict, "email already exists")
+			return
+		}
+		log.Error().Err(err).Msg("update user failed")
+		respondError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, user)
+}
+
+// DeleteUser soft-deletes a user.
+func (h *HTTPHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid user ID")
+		return
+	}
+
+	if err := h.userService.Delete(r.Context(), id); err != nil {
+		if err == repository.ErrNotFound {
+			respondError(w, http.StatusNotFound, "user not found")
+			return
+		}
+		log.Error().Err(err).Msg("delete user failed")
+		respondError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"message": "user deleted"})
 }
 
 // ListUsers returns a paginated list of users.
@@ -153,28 +232,6 @@ func (h *HTTPHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, result)
-}
-
-// GetUser retrieves a user by ID.
-func (h *HTTPHandler) GetUser(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid user ID")
-		return
-	}
-
-	user, err := h.userService.GetByID(r.Context(), id)
-	if err != nil {
-		if err == repository.ErrNotFound {
-			respondError(w, http.StatusNotFound, "user not found")
-			return
-		}
-		log.Error().Err(err).Msg("get user failed")
-		respondError(w, http.StatusInternalServerError, "internal server error")
-		return
-	}
-
-	respondJSON(w, http.StatusOK, user)
 }
 
 // ── Response Helpers ──────────────────────────────────────

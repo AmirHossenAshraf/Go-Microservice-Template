@@ -166,10 +166,13 @@ func setupHTTPRouter(cfg *config.Config, h *handler.HTTPHandler) *chi.Mux {
 			r.Use(middleware.RateLimitMiddleware(100, time.Minute))
 
 			r.Route("/users", func(r chi.Router) {
-
-				r.Post("/", h.CreateUser)
 				r.Get("/", h.ListUsers)
-
+				r.Post("/", h.CreateUser)
+				r.Route("/{id}", func(r chi.Router) {
+					r.Get("/", h.GetUser)
+					r.Put("/", h.UpdateUser)
+					r.Delete("/", h.DeleteUser)
+				})
 			})
 		})
 
