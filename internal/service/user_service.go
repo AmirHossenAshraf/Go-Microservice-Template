@@ -9,14 +9,18 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
 )
 
 // UserService defines the business operations for users.
 type UserService interface {
-	Login(ctx context.Context, req model.LoginRequest, jwtSecret string, expHours int) (*model.LoginResponse, error)
 	Register(ctx context.Context, req model.CreateUserRequest) (*model.User, error)
+	Login(ctx context.Context, req model.LoginRequest, jwtSecret string, expHours int) (*model.LoginResponse, error)
+	GetByID(ctx context.Context, id uuid.UUID) (*model.User, error)
+	Update(ctx context.Context, id uuid.UUID, req model.UpdateUserRequest) (*model.User, error)
+	Delete(ctx context.Context, id uuid.UUID) error
 	List(ctx context.Context, params model.ListParams) (*model.ListResponse[model.User], error)
 }
 
@@ -98,6 +102,67 @@ func (s *userService) Login(ctx context.Context, req model.LoginRequest, jwtSecr
 		ExpiresAt: expiresAt,
 		User:      *user,
 	}, nil
+}
+
+func (s *userService) GetByID(ctx context.Context, id uuid.UUID) (*model.User, error) {
+	// Try cache first
+	user, err := s.cache.Get(ctx, id)
+	if err == nil && user != nil {
+		log.Debug().Str("user_id", id.String()).Msg("cache hit")
+		return user, nil
+	}
+
+	// Cache miss — fetch from database
+	user, err = s.repo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update cache
+	if err := s.cache.Set(ctx, user); err != nil {
+		log.Warn().Err(err).Msg("failed to update cache")
+	}
+
+	return user, nil
+}
+
+func (s *userService) Update(ctx context.Context, id uuid.UUID, req model.UpdateUserRequest) (*model.User, error) {
+	user, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply partial updates
+	if req.Email != nil {
+		user.Email = *req.Email
+	}
+	if req.Name != nil {
+		user.Name = *req.Name
+	}
+
+	if err := s.repo.Update(ctx, user); err != nil {
+		return nil, err
+	}
+
+	// Invalidate cache
+	if err := s.cache.Delete(ctx, id); err != nil {
+		log.Warn().Err(err).Msg("failed to invalidate cache")
+	}
+
+	return user, nil
+}
+
+func (s *userService) Delete(ctx context.Context, id uuid.UUID) error {
+	if err := s.repo.Delete(ctx, id); err != nil {
+		return err
+	}
+
+	// Invalidate cache
+	if err := s.cache.Delete(ctx, id); err != nil {
+		log.Warn().Err(err).Msg("failed to invalidate cache after delete")
+	}
+
+	return nil
 }
 
 func (s *userService) List(ctx context.Context, params model.ListParams) (*model.ListResponse[model.User], error) {

@@ -26,6 +26,19 @@ const (
 	RoleAdmin Role = "admin"
 )
 
+// CreateUserRequest is the DTO for user creation.
+type CreateUserRequest struct {
+	Email    string `json:"email" validate:"required,email"`
+	Name     string `json:"name" validate:"required,min=2,max=100"`
+	Password string `json:"password" validate:"required,min=8"`
+}
+
+// UpdateUserRequest is the DTO for user updates.
+type UpdateUserRequest struct {
+	Email *string `json:"email,omitempty" validate:"omitempty,email"`
+	Name  *string `json:"name,omitempty" validate:"omitempty,min=2,max=100"`
+}
+
 // LoginRequest is the DTO for authentication.
 type LoginRequest struct {
 	Email    string `json:"email" validate:"required,email"`
@@ -39,13 +52,6 @@ type LoginResponse struct {
 	User      User      `json:"user"`
 }
 
-// CreateUserRequest is the DTO for user creation.
-type CreateUserRequest struct {
-	Email    string `json:"email" validate:"required,email"`
-	Name     string `json:"name" validate:"required,min=2,max=100"`
-	Password string `json:"password" validate:"required,min=8"`
-}
-
 // ListParams holds pagination and filtering parameters.
 type ListParams struct {
 	Page     int    `json:"page"`
@@ -53,6 +59,15 @@ type ListParams struct {
 	SortBy   string `json:"sort_by"`
 	SortDir  string `json:"sort_dir"` // "asc" or "desc"
 	Search   string `json:"search"`
+}
+
+// ListResponse wraps paginated results.
+type ListResponse[T any] struct {
+	Items      []T   `json:"items"`
+	Total      int64 `json:"total"`
+	Page       int   `json:"page"`
+	PageSize   int   `json:"page_size"`
+	TotalPages int   `json:"total_pages"`
 }
 
 // DefaultListParams returns sensible defaults for pagination.
@@ -63,13 +78,4 @@ func DefaultListParams() ListParams {
 		SortBy:   "created_at",
 		SortDir:  "desc",
 	}
-}
-
-// ListResponse wraps paginated results.
-type ListResponse[T any] struct {
-	Items      []T   `json:"items"`
-	Total      int64 `json:"total"`
-	Page       int   `json:"page"`
-	PageSize   int   `json:"page_size"`
-	TotalPages int   `json:"total_pages"`
 }
